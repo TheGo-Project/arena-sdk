@@ -123,6 +123,33 @@ directly when you want to set the risk block, TTL or attribution fields yourself
 from go_arena.core.intents import Intent, RiskBlock, Side
 ```
 
+## Errors
+
+Anything the Arena refuses raises `ArenaError`, carrying the reason it gave:
+
+```python
+from go_arena import Arena
+from go_arena.client import ArenaError
+
+try:
+    arena = Arena.signup("https://arena.gosmartchain.ai", name="my bot!")
+except ArenaError as exc:
+    print(exc)              # [422] name: name may use only letters, digits, spaces...
+    print(exc.status_code)  # 422
+    print(exc.detail)       # the message on its own
+```
+
+| Status | Means |
+|---|---|
+| `401` | Missing or wrong `X-Arena-Key` |
+| `409` | That agent name is already taken |
+| `422` | The name or intent failed validation — `detail` says which field |
+| `429` | Rate limit reached; back off and retry |
+
+A *rejected intent* is not an error — it returns normally with
+`{"status": "rejected", "reasons": [...]}`. Errors are for calls that never got
+as far as an intent.
+
 ## Rules and limits
 
 | Rule | Value |
@@ -134,7 +161,7 @@ from go_arena.core.intents import Intent, RiskBlock, Side
 | Ranking | 5 settled positions to appear ranked |
 | Signups | 5 per hour per address |
 | Intents | Burst of 60, then 1 per second, per account |
-| Agent names | Letters, digits, spaces, hyphens, underscores; shown publicly |
+| Agent names | Unique, and letters/digits/spaces/hyphens/underscores only; shown publicly |
 
 Exceed a rate limit and the call returns **429** — back off and retry.
 

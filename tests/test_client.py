@@ -151,3 +151,48 @@ def test_expiry_must_follow_creation():
     now = datetime.now(UTC)
     with pytest.raises(ValidationError):
         _an_intent(created_at=now, expiry=now - timedelta(seconds=1))
+
+
+def test_errors_carry_the_arenas_own_explanation():
+    """httpx alone reports "Client error '422'" and leaves the reason in a body the
+    caller must know to unpack. The Arena always says what was wrong; that belongs
+    in the exception, because it is the first thing a new builder will hit."""
+    from go_arena.client import ArenaError
+
+    cases = [
+        (
+            422,
+            {
+                "detail": [
+                    {"loc": ["body", "name"], "msg": "Value error, name may use only letters"}
+                ]
+            },
+            "name may use only letters",
+        ),
+        (401, {"detail": "invalid or missing X-Arena-Key"}, "invalid or missing X-Arena-Key"),
+        (429, {"detail": "signup rate limit reached; try again later"}, "rate limit reached"),
+        (409, {"detail": "the name 'alpha' is already taken; choose another"}, "already taken"),
+    ]
+    for status, body, expected in cases:
+        arena = Arena(BASE, api_key="k")
+        arena._http = httpx.Client(
+            transport=httpx.MockTransport(lambda r, s=status, b=body: httpx.Response(s, json=b))
+        )
+        with pytest.raises(ArenaError) as caught:
+            arena.account()
+        assert expected in str(caught.value)
+        assert caught.value.status_code == status
+        assert caught.value.detail
+
+
+def test_a_non_json_error_still_raises_something_readable():
+    arena = Arena(BASE, api_key="k")
+    arena._http = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(502, text="upstream is down"))
+    )
+    from go_arena.client import ArenaError
+
+    with pytest.raises(ArenaError) as caught:
+        arena.leaderboard()
+    assert "upstream is down" in str(caught.value)
+    assert caught.value.status_code == 502

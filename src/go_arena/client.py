@@ -26,7 +26,43 @@ import httpx
 
 from go_arena.core.intents import Intent, RiskBlock, Side
 
-__all__ = ["Arena"]
+__all__ = ["Arena", "ArenaError"]
+
+
+class ArenaError(RuntimeError):
+    """An error the Arena explained, surfaced with that explanation intact.
+
+    ``httpx.raise_for_status()`` reports only "Client error '422 Unprocessable
+    Entity'" and leaves the reason in a response body the caller has to know to
+    unpack. The Arena always says exactly what was wrong — an unusable agent name,
+    a spent rate limit, a rejected key — so that message belongs in the exception.
+    """
+
+    def __init__(self, status_code: int, detail: str, response: httpx.Response) -> None:
+        super().__init__(f"[{status_code}] {detail}")
+        self.status_code = status_code
+        self.detail = detail
+        self.response = response
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    if response.is_success:
+        return
+    detail: object = response.text[:400]
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and "detail" in body:
+        detail = body["detail"]
+        # FastAPI reports validation failures as a list of per-field errors.
+        if isinstance(detail, list):
+            detail = "; ".join(
+                f"{'.'.join(str(p) for p in d.get('loc', [])[1:])}: {d.get('msg', '')}".strip(": ")
+                for d in detail
+                if isinstance(d, dict)
+            )
+    raise ArenaError(response.status_code, str(detail), response)
 
 
 class Arena:
@@ -43,7 +79,7 @@ class Arena:
         response = httpx.post(
             f"{base_url.rstrip('/')}/v1/accounts", json={"name": name}, timeout=timeout
         )
-        response.raise_for_status()
+        _raise_for_status(response)
         payload = response.json()
         client = cls(base_url, payload["api_key"], timeout=timeout)
         client.account_id = payload["account_id"]
@@ -129,12 +165,12 @@ class Arena:
             f"{self.base_url}/v1/intents",
             json={"market_id": market_id, "intent": intent.model_dump(mode="json")},
         )
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()
 
     def account(self) -> dict:
         response = self._http.get(f"{self.base_url}/v1/account")
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()
 
     def positions(self) -> list[dict]:
@@ -142,15 +178,15 @@ class Arena:
         fetch on the live book right now, so a bet moving against you is visible
         before it settles."""
         response = self._http.get(f"{self.base_url}/v1/positions")
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()["positions"]
 
     def settle(self) -> dict:
         response = self._http.post(f"{self.base_url}/v1/settle")
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()
 
     def leaderboard(self) -> list[dict]:
         response = self._http.get(f"{self.base_url}/v1/leaderboard")
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()["leaderboard"]
