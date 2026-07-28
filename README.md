@@ -171,3 +171,7 @@ uv run ruff check src tests
 ```
 
 The tests run against a mocked transport and need no network and no Arena account.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
