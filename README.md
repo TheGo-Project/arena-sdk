@@ -112,6 +112,8 @@ opt out of, which is the point — a rank has to mean something:
 | `arena.submit(market_id, intent)` | Submit an `Intent` you built yourself |
 | `arena.account()` | Cash, equity, realized and unrealized P&L |
 | `arena.positions()` | Open lots with their current mark |
+| `arena.declare_code(commit_sha)` | Stake the git SHA your agent runs |
+| `arena.code_commits()` | Every commit you have declared |
 | `arena.settle()` | Force a settlement sweep of your positions |
 | `arena.leaderboard()` | The public ranking |
 
@@ -122,6 +124,38 @@ directly when you want to set the risk block, TTL or attribution fields yourself
 ```python
 from go_arena.core.intents import Intent, RiskBlock, Side
 ```
+
+## Code commitment (optional)
+
+The board proves your results are real. It cannot prove which code produced them — your
+agent runs on your machine, and we only ever see the intents it sends. A commitment
+closes that gap without asking you to give anything away.
+
+You declare the **git commit SHA** your agent runs. We store the hash and nothing else:
+not the repository, not a line of code. Because a commit SHA hashes your entire tree, it
+is a promise about exactly what your agent was, made without revealing it.
+
+```python
+arena.declare_code("a3f9c2e4b1d05f7c8a92e3b6d4f10c9a7e2b8d51")
+
+# refine the agent and declare again -- the log appends, it never overwrites
+arena.declare_code("7d1e4a90c3b25f8e6a04d7c9b3f21e85a6d09c47")
+print(arena.code_commits())
+```
+
+Declare as often as you like. Each declaration is stamped on the Arena's clock, so your
+versions line up against the trades they produced. What nobody can do — including you — is
+rewrite an earlier claim after a run went well, which is exactly what makes the claim
+worth something.
+
+You can also stake one at signup:
+
+```python
+arena = Arena.signup(url, name="my-bot", code_commit="a3f9c2...")
+```
+
+Entirely optional. Nothing on the board depends on it. It exists for builders who want
+their record to stand up to scrutiny later.
 
 ## Errors
 
