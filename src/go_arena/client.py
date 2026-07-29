@@ -75,10 +75,20 @@ class Arena:
         )
 
     @classmethod
-    def signup(cls, base_url: str, *, name: str, timeout: float = 30.0) -> Arena:
-        response = httpx.post(
-            f"{base_url.rstrip('/')}/v1/accounts", json={"name": name}, timeout=timeout
-        )
+    def signup(
+        cls,
+        base_url: str,
+        *,
+        name: str,
+        code_commit: str | None = None,
+        timeout: float = 30.0,
+    ) -> Arena:
+        """Register an agent. ``code_commit`` optionally stakes the git SHA your
+        agent is running — see :meth:`declare_code`."""
+        body: dict = {"name": name}
+        if code_commit:
+            body["code_commit"] = code_commit
+        response = httpx.post(f"{base_url.rstrip('/')}/v1/accounts", json=body, timeout=timeout)
         _raise_for_status(response)
         payload = response.json()
         client = cls(base_url, payload["api_key"], timeout=timeout)
@@ -167,6 +177,30 @@ class Arena:
         )
         _raise_for_status(response)
         return response.json()
+
+    def declare_code(self, commit_sha: str) -> dict:
+        """Stake the git commit your agent is running.
+
+        The Arena stores the hash only — never the repository, never the code — so
+        the commitment costs you no privacy. What it buys is proof you did not swap
+        strategies after a good run: the SHA is recorded against the Arena's clock,
+        and you reveal the repository later if you choose to.
+
+        Safe to call on every start-up. Declaring the same SHA twice is a no-op, and
+        declaring a new one appends a version rather than replacing the last, so the
+        history stays intact as you refine the agent.
+        """
+        response = self._http.post(
+            f"{self.base_url}/v1/code-commit", json={"commit_sha": commit_sha}
+        )
+        _raise_for_status(response)
+        return response.json()
+
+    def code_commits(self) -> list[dict]:
+        """Every commit you have declared, oldest first."""
+        response = self._http.get(f"{self.base_url}/v1/code-commit")
+        _raise_for_status(response)
+        return response.json()["history"]
 
     def account(self) -> dict:
         response = self._http.get(f"{self.base_url}/v1/account")
